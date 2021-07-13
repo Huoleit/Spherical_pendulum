@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<robot name="quadrotor_with_pendulum">
+    <link name="base">
+    </link>
+
+    <link name="quadrotor">
+        <visual>
+            <geometry>
+                <mesh filename="./meshes/quad.obj" scale="3.0 3.0 3.0"/>
+                <!-- <box size="0.1 0.1 0.1"/> -->
+            </geometry>
+        </visual>
+
+        <inertial>
+            <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
+            <mass value="0.6"/>
+             <inertia ixx="0.38" ixy="0" ixz="0" iyy="0.38" iyz="0" izz="0.38"/>
+        </inertial>
+    </link>
+    <joint name="connect_quadrotor" type="fixed">
+        <parent link="base"/>
+        <child link="quadrotor"/>
+    </joint>
+
+    <!-- <link name="bar_tip">
+        <inertial>
+            <mass value="0.025" />
+            <inertia ixx="5.8083e-4" ixy="0" ixz="0" iyy="3.0833e-5" iyz="0" izz="5.9083e-4" />
+        </inertial>  
+    </link>
+
+    <link name="bar">
+        <inertial>
+            <mass value="0.025" />
+            <inertia ixx="5.8083e-4" ixy="0" ixz="0" iyy="3.0833e-5" iyz="0" izz="5.9083e-4" />
+            <origin xyz="0.0 0.0 -0.2"/>
+        </inertial> 
+        <visual>
+            <geometry>
+                <cylinder radius="0.01" length="0.4"/>
+            </geometry>
+            <origin xyz="0.0 0.0 -0.2"/>
+        </visual>
+    </link>
+
+    <joint name="x_revolution" type="continuous">
+        <parent link="quadrotor"/>
+        <child link="bar_tip"/>
+        <axis xyz="1.0 0.0 0.0"/>
+    </joint>
+
+     <joint name="y_revolution" type="continuous">
+        <parent link="bar_tip"/>
+        <child link="bar"/>
+        <axis xyz="0.0 1.0 0.0"/>
+    </joint>
+
+    <link name="ball">
+        <visual>
+            <geometry>
+                <sphere radius="0.02"/>
+            </geometry>
+        </visual>
+
+        <inertial>
+            <mass value="0.5"/>
+            <inertia ixx="0.08" ixy="0.0" ixz="0.0" iyy="0.08" iyz="0.0" izz="0.08"/>
+        </inertial>
+        
+    </link>
+    <joint name="bar_ball" type="fixed">
+        <parent link="bar"/>
+        <child link="ball"/>
+        <origin xyz="0.0 0.0 -0.4"/>
+    </joint> -->
+</robot>
