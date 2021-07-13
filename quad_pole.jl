@@ -29,7 +29,7 @@ struct quadrotor{C} <: LieGroupModel
 end
 
 RobotDynamics.LieState(::quadrotor) = RobotDynamics.QuatState(13, SA[1])
-RobotDynamics.control_dim(::quadrotor) = 6
+RobotDynamics.control_dim(::quadrotor) = 4
 
 
 function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::AbstractVector{T2}) where {T1, T2}
@@ -38,10 +38,10 @@ function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::Abst
     res = model.dyncache[T1]
 
     copyto!(state, x)
-    # F = [0., 0., u[1]+u[2]+u[3]+u[4]]
-    # τ = [0.45*(u[2]-u[4]), 0.45*(u[3]-u[1]), (u[1]-u[2]+u[3]-u[4])]
-    τ = u[1:3]
-    F = u[4:6]
+    F = [0., 0., u[1]+u[2]+u[3]+u[4]]
+    τ = [0.45*(u[2]-u[4]), 0.45*(u[3]-u[1]), (u[1]-u[2]+u[3]-u[4])]
+    # τ = u[1:3]
+    # F = u[4:6]
     control = [τ;F]
     RigidBodyDynamics.dynamics!(res, state, control)
     q̇ = res.q̇
@@ -71,7 +71,7 @@ ts = range(0, tf, step=Δt)
 N = Int(round(tf/Δt)) + 1
 
 n = num_positions(quad.mech) + num_velocities(quad.mech)
-m = 6
+m = 4
 Q = 1.0e-2*Diagonal(@SVector ones(n))
 Qf = 100.0*Diagonal(@SVector ones(n))
 R = 1.0e-2*Diagonal(@SVector ones(m))
@@ -80,7 +80,8 @@ xf = [normalize([1.,1.,1.,0.]);[4.,4.,4.];zeros(6)]
 obj = LQRObjective(Q,R,Qf,xf,N)
 
 zero!(quad.statecache[Float64])
-u0 = dynamics_bias(quad.statecache[Float64])
+hover_force = dynamics_bias(quad.statecache[Float64])[end]
+u0 = fill(hover_force/m, m)
 U0 = [u0 for k = 1:N-1]
 conSet = ConstraintList(n,m,N)
 # x_bnd = [Inf,Inf,0.06,0.06,Inf,Inf,Inf,Inf]
@@ -113,8 +114,7 @@ ts, qs, vs = simulate(quad.statecache[Float64], 5.0, Δt = 1e-3);
 X = states(altro)
 x_traj = [x[1:7] for x in X]
 animation = Animation(mvis, ts, x_traj)
-MeshCatMechanisms.animate(mvis, collect(ts), x_traj; realtimerate = 1.);
-
+setanimation!(mvis, animation)
 
 function simple_control!(torques::AbstractVector, t, state::MechanismState)
     torques[velocity_range(state, shoulder)] .= -1 .* velocity(state, shoulder)
