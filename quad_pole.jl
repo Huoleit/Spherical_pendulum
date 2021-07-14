@@ -13,6 +13,7 @@ using MeshCatMechanisms
 using TrajectoryOptimization
 using Altro
 using RobotDynamics
+using PyPlot
 
 struct quadrotor{C} <: LieGroupModel
     mech::Mechanism{Float64}
@@ -28,7 +29,7 @@ struct quadrotor{C} <: LieGroupModel
     end
 end
 
-RobotDynamics.LieState(::quadrotor) = RobotDynamics.QuatState(13, SA[1])
+RobotDynamics.LieState(::quadrotor) = RobotDynamics.QuatState(17, SA[1])
 RobotDynamics.control_dim(::quadrotor) = 4
 
 
@@ -42,7 +43,7 @@ function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::Abst
     τ = [0.45*(u[2]-u[4]), 0.45*(u[3]-u[1]), (u[1]-u[2]+u[3]-u[4])]
     # τ = u[1:3]
     # F = u[4:6]
-    control = [τ;F]
+    control = [τ;F;0.;0.]
     RigidBodyDynamics.dynamics!(res, state, control)
     q̇ = res.q̇
     v̇ = res.v̇
@@ -66,7 +67,7 @@ quad_mechanism = parse_urdf(URDFPATH, floating=true, remove_fixed_tree_joints=fa
 quad = quadrotor(quad_mechanism)
 
 tf = 5.0
-Δt = 1e-4
+Δt = 1e-2
 ts = range(0, tf, step=Δt)
 N = Int(round(tf/Δt)) + 1
 
@@ -75,24 +76,24 @@ m = 4
 Q = 1.0e-2*Diagonal(@SVector ones(n))
 Qf = 100.0*Diagonal(@SVector ones(n))
 R = 1.0e-2*Diagonal(@SVector ones(m))
-x0 = [normalize([1.,0.,0.,0.]);[0.,0.,1.];zeros(6)]
-xf = [normalize([1.,1.,1.,0.]);[4.,4.,4.];zeros(6)]
+x0 = [normalize([1.,0.,0.,0.]);[0.,0.,1.];zeros(10)]
+xf = [normalize([1.,0.,0.,0.]);[4.,4.,4.];zeros(10)]
 obj = LQRObjective(Q,R,Qf,xf,N)
 
 zero!(quad.statecache[Float64])
-hover_force = dynamics_bias(quad.statecache[Float64])[end]
+hover_force = dynamics_bias(quad.statecache[Float64])[6]
 u0 = fill(hover_force/m, m)
 U0 = [u0 for k = 1:N-1]
 conSet = ConstraintList(n,m,N)
-# x_bnd = [Inf,Inf,0.06,0.06,Inf,Inf,Inf,Inf]
-# bnd = BoundConstraint(n, m, x_min=-x_bnd, x_max=x_bnd)
-# goal = GoalConstraint(xf)
+x_bnd = [fill(Inf, 7);0.1;0.1;fill(Inf, 8)]
+bnd = BoundConstraint(n, m, x_min=-x_bnd, x_max=x_bnd)
+goal = GoalConstraint(xf)
 # waypoint = GoalConstraint([3,2,0,0,0,0,0,0], [1,2])
-# add_constraint!(conSet, bnd, 1:N-1)
+add_constraint!(conSet, bnd, 1:N-1)
 # add_constraint!(conSet, waypoint, 500)
-# add_constraint!(conSet, goal, N)
+add_constraint!(conSet, goal, N)
 
-prob = Problem(quad, obj, xf, tf, x0=x0)
+prob = Problem(quad, obj, xf, tf, x0=x0, constraints=conSet)
 initial_controls!(prob, U0);
 rollout!(prob)
 opts = SolverOptions(
@@ -108,19 +109,18 @@ mvis = initialize_visualizer(quad)
 render(mvis)
 # final_time = 5.
 # zero!(quad.statecache[Float64])
-ts, qs, vs = simulate(quad.statecache[Float64], 5.0, Δt = 1e-3);
+# ts, qs, vs = simulate(quad.statecache[Float64], 5.0, Δt = 1e-3);
 
 # MeshCatMechanisms.animate(mvis, ts, qs; realtimerate = 1.);
 X = states(altro)
-x_traj = [x[1:7] for x in X]
+x_traj = [x[1:9] for x in X]
 animation = Animation(mvis, ts, x_traj)
 setanimation!(mvis, animation)
 
-function simple_control!(torques::AbstractVector, t, state::MechanismState)
-    torques[velocity_range(state, shoulder)] .= -1 .* velocity(state, shoulder)
-    torques[velocity_range(state, elbow)] .= 10 * sin(t)
-end
-
+pygui(true)
+theta_traj = [x[8:9]' for x in X]
+theta_traj = vcat(theta_traj...)
+plot(ts', theta_traj)
 
 
 # set_configuration!(quad.statecache[Float64], findjoint(quad.mech, "base_to_world"), [1, 2., 3., 4., .1, .0, .0])

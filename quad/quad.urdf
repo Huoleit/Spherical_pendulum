@@ -1,5 +1,33 @@
 <?xml version="1.0"?>
 <robot name="quadrotor_with_pendulum">
+ <material name="black">
+    <color rgba="0.0 0.0 0.0 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.0 0.0 0.8 1.0"/>
+  </material>
+  <material name="green">
+    <color rgba="0.0 0.8 0.0 1.0"/>
+  </material>
+  <material name="grey">
+    <color rgba="0.2 0.2 0.2 1.0"/>
+  </material>
+  <material name="silver">
+    <color rgba="0.913725490196 0.913725490196 0.847058823529 1.0"/>
+  </material>
+  <material name="orange">
+    <color rgba="1.0 0.423529411765 0.0392156862745 1.0"/>
+  </material>
+  <material name="brown">
+    <color rgba="0.870588235294 0.811764705882 0.764705882353 1.0"/>
+  </material>
+  <material name="red">
+    <color rgba="0.8 0.0 0.0 1.0"/>
+  </material>
+  <material name="white">
+    <color rgba="1.0 1.0 1.0 1.0"/>
+  </material>
+
     <link name="base">
     </link>
 
@@ -22,7 +50,7 @@
         <child link="quadrotor"/>
     </joint>
 
-    <!-- <link name="bar_tip">
+    <link name="bar_tip">
         <inertial>
             <mass value="0.025" />
             <inertia ixx="5.8083e-4" ixy="0" ixz="0" iyy="3.0833e-5" iyz="0" izz="5.9083e-4" />
@@ -37,8 +65,9 @@
         </inertial> 
         <visual>
             <geometry>
-                <cylinder radius="0.01" length="0.4"/>
+                <cylinder radius="0.015" length="0.4"/>
             </geometry>
+            <material name="blue"/>
             <origin xyz="0.0 0.0 -0.2"/>
         </visual>
     </link>
@@ -58,8 +87,9 @@
     <link name="ball">
         <visual>
             <geometry>
-                <sphere radius="0.02"/>
+                <sphere radius="0.06"/>
             </geometry>
+            <material name="green"/>
         </visual>
 
         <inertial>
@@ -72,5 +102,5 @@
         <parent link="bar"/>
         <child link="ball"/>
         <origin xyz="0.0 0.0 -0.4"/>
-    </joint> -->
+    </joint>
 </robot>
