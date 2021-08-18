@@ -11,6 +11,7 @@ using ForwardDiff
 using Altro
 using RobotDynamics
 using PyPlot
+using DelimitedFiles
 
 struct quadrotor{C} <: LieGroupModel
     mech::Mechanism{Float64}
@@ -36,14 +37,10 @@ function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::Abst
     res = model.dyncache[T1]
 
     copyto!(state, x)
-    Ct = 5.84e-06
-    Cq = 0.06
 
-    thrust = u.^2 .* Ct
-    F = [0., 0., sum(thrust)]
-    τ = [0.22*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), 0.13*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), Cq*(-thrust[1]-thrust[2]+thrust[3]+thrust[4])]
-    # τ = u[1:3]
-    # F = u[4:6]
+    F = [0., 0., u[4]]
+    τ = u[1:3]
+ 
     control = [τ;F]
     RigidBodyDynamics.dynamics!(res, state, control)
     q̇ = res.q̇
@@ -67,8 +64,8 @@ const URDFPATH = joinpath(@__DIR__, "iris","iris.urdf")
 quad_mechanism = parse_urdf(URDFPATH, floating=true, remove_fixed_tree_joints=false)
 quad = quadrotor(quad_mechanism)
 
-tf = 10.0
-Δt = 4e-3
+tf = 5.0
+Δt = 0.015
 ts = range(0, tf, step=Δt)
 N = Int(round(tf/Δt)) + 1
 
@@ -76,22 +73,22 @@ n = num_positions(quad.mech) + num_velocities(quad.mech)
 m = 4
 Q = 1.0e-1*Diagonal(@SVector ones(n))
 Qf = 100.0*Diagonal(@SVector ones(n))
-R = 1.0/(1600^2)*Diagonal(@SVector ones(m))
+R = 1.0/(24^2)*Diagonal(@SVector ones(m))
 x0 = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
-xf = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
+xf = [normalize([1.,0.,0.,0.]);[3.,3.,0.];zeros(n-7)]
 obj = LQRObjective(Q,R,Qf,xf,N)
 
 zero!(quad.statecache[Float64])
 hover_force = dynamics_bias(quad.statecache[Float64])[6]
-u0 = fill(sqrt(hover_force/m/5.84e-06),m)
+u0 = [0., 0., 0., hover_force]
 U0 = [u0 for k = 1:N-1]
 conSet = ConstraintList(n,m,N)
-x_bnd = [fill(Inf, 7);0.1;0.1;fill(Inf, 8)]
-bnd = BoundConstraint(n, m, x_min=-x_bnd, x_max=x_bnd)
+x_bnd = [fill(Inf, 7);fill(Inf, 6)]
+bnd = BoundConstraint(n, m, x_min=[fill(Inf, 6);0;fill(Inf, 6)], x_max=fill(Inf, 13), u_min=[-Inf, -Inf, -Inf, 0], u_max=[Inf, Inf, Inf, 24])
 goal = GoalConstraint(xf)
-waypoint = GoalConstraint([[0.9330127, 0.25, 0.25, 0.0669873]; zeros(13)], 1:4)
+waypoint = GoalConstraint([[1.0, 0., 0., 0.0]; [1.5, 1.5, 2.];zeros(6)], 5:7)
 add_constraint!(conSet, bnd, 1:N-1)
-add_constraint!(conSet, waypoint, 200)
+add_constraint!(conSet, waypoint, 600)
 add_constraint!(conSet, goal, N)
 
 prob = Problem(quad, obj, xf, tf, x0=x0, constraints=conSet)
@@ -108,15 +105,13 @@ solve!(altro);
 
 mvis = initialize_visualizer(quad)
 render(mvis)
-# final_time = 5.
-# zero!(quad.statecache[Float64])
-# ts, qs, vs = simulate(quad.statecache[Float64], 5.0, Δt = 1e-3);
 
-# MeshCatMechanisms.animate(mvis, ts, qs; realtimerate = 1.);
-u0 = fill(sqrt(hover_force/m/5.84e-06),m)
-U0 = [u0 for k = 1:N-1]
-initial_controls!(prob, U0);
-rollout!(prob)
+
+# u0 = fill(sqrt(hover_force/m/5.84e-06),m)
+# U0 = [u0 for k = 1:N-1]
+# initial_controls!(prob, U0);
+# rollout!(prob)
+
 X = states(altro)
 x_traj = [x[1:7] for x in X]
 animation = Animation(mvis, ts, x_traj)
@@ -141,12 +136,16 @@ u_traj = [i for i in U]
 u_traj = hcat(u_traj...)
 plot(ts, u_traj)
 
-open("controls.csv", "w") do io
-    for i=1:length(U)
-        writedlm(io, U[i]', ',')
-    end
+U_convert = [zeros(4) for u in U]
+for i=1:length(U_convert)
+    U_convert[i][1] = U[i][1]
+    U_convert[i][2] = -U[i][2]
+    U_convert[i][3] = -U[i][3]
+    U_convert[i][4] = -U[i][4]*1.04
 end
 
-
-initial_controls!(prob, U0);
-rollout!(prob)
+open("/home/cecil/ros2_ws/controls.csv", "w") do io
+    for i=1:length(U_convert)
+        writedlm(io, U_convert[i]', ',')
+    end
+end
