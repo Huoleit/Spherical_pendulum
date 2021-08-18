@@ -26,7 +26,7 @@ struct quadrotor{C} <: LieGroupModel
     end
 end
 
-RobotDynamics.LieState(::quadrotor) = RobotDynamics.QuatState(17, SA[1])
+RobotDynamics.LieState(::quadrotor) = RobotDynamics.QuatState(13, SA[1])
 RobotDynamics.control_dim(::quadrotor) = 4
 
 
@@ -36,11 +36,15 @@ function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::Abst
     res = model.dyncache[T1]
 
     copyto!(state, x)
-    F = [0., 0., u[1]+u[2]+u[3]+u[4]]
-    τ = [0.45*(u[2]-u[4]), 0.45*(u[3]-u[1]), (u[1]-u[2]+u[3]-u[4])]
+    Ct = 5.84e-06
+    Cq = 0.06
+
+    thrust = u.^2 .* Ct
+    F = [0., 0., sum(thrust)]
+    τ = [0.22*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), 0.13*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), Cq*(-thrust[1]-thrust[2]+thrust[3]+thrust[4])]
     # τ = u[1:3]
     # F = u[4:6]
-    control = [τ;F;0.;0.]
+    control = [τ;F]
     RigidBodyDynamics.dynamics!(res, state, control)
     q̇ = res.q̇
     v̇ = res.v̇
@@ -53,33 +57,33 @@ quad_state(model::quadrotor) = [configuration(model.statecache[Float64]);velocit
 function initialize_visualizer(a1::quadrotor)
     vis = Visualizer()
     delete!(vis)
-    cd(joinpath(@__DIR__,"quad"))
+    cd(joinpath(@__DIR__,"iris"))
     mvis = MechanismVisualizer(a1.mech, URDFVisuals(URDFPATH), vis)
     cd(@__DIR__)
     return mvis
 end
 
-const URDFPATH = joinpath(@__DIR__, "quad","quad.urdf")
+const URDFPATH = joinpath(@__DIR__, "iris","iris.urdf")
 quad_mechanism = parse_urdf(URDFPATH, floating=true, remove_fixed_tree_joints=false)
 quad = quadrotor(quad_mechanism)
 
-tf = 5.0
-Δt = 1e-2
+tf = 10.0
+Δt = 4e-3
 ts = range(0, tf, step=Δt)
 N = Int(round(tf/Δt)) + 1
 
 n = num_positions(quad.mech) + num_velocities(quad.mech)
 m = 4
-Q = 1.0e-2*Diagonal(@SVector ones(n))
+Q = 1.0e-1*Diagonal(@SVector ones(n))
 Qf = 100.0*Diagonal(@SVector ones(n))
-R = 1.0e-2*Diagonal(@SVector ones(m))
-x0 = [normalize([1.,0.,0.,0.]);[0.,0.,1.];zeros(10)]
-xf = [normalize([1.,0.,0.,0.]);[4.,4.,4.];zeros(10)]
+R = 1.0/(1600^2)*Diagonal(@SVector ones(m))
+x0 = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
+xf = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
 obj = LQRObjective(Q,R,Qf,xf,N)
 
 zero!(quad.statecache[Float64])
 hover_force = dynamics_bias(quad.statecache[Float64])[6]
-u0 = fill(hover_force/m, m)
+u0 = fill(sqrt(hover_force/m/5.84e-06),m)
 U0 = [u0 for k = 1:N-1]
 conSet = ConstraintList(n,m,N)
 x_bnd = [fill(Inf, 7);0.1;0.1;fill(Inf, 8)]
@@ -109,8 +113,12 @@ render(mvis)
 # ts, qs, vs = simulate(quad.statecache[Float64], 5.0, Δt = 1e-3);
 
 # MeshCatMechanisms.animate(mvis, ts, qs; realtimerate = 1.);
+u0 = fill(sqrt(hover_force/m/5.84e-06),m)
+U0 = [u0 for k = 1:N-1]
+initial_controls!(prob, U0);
+rollout!(prob)
 X = states(altro)
-x_traj = [x[1:9] for x in X]
+x_traj = [x[1:7] for x in X]
 animation = Animation(mvis, ts, x_traj)
 setanimation!(mvis, animation)
 
@@ -127,3 +135,18 @@ plot(ts, ori_traj)
 # set_configuration!(quad.statecache[Float64], findjoint(quad.mech, "base_to_world"), [1, 2., 3., 4., .1, .0, .0])
 # set_configuration!(mvis, configuration(quad.statecache[Float64]))
 # quad.statecache[Float64]
+
+U = controls(altro)
+u_traj = [i for i in U]
+u_traj = hcat(u_traj...)
+plot(ts, u_traj)
+
+open("controls.csv", "w") do io
+    for i=1:length(U)
+        writedlm(io, U[i]', ',')
+    end
+end
+
+
+initial_controls!(prob, U0);
+rollout!(prob)
