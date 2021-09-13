@@ -11,6 +11,7 @@ using ForwardDiff
 using Altro
 using RobotDynamics
 using PyPlot
+using DelimitedFiles
 
 struct quadrotor{C} <: LieGroupModel
     mech::Mechanism{Float64}
@@ -41,7 +42,7 @@ function RobotDynamics.dynamics(model::quadrotor, x::AbstractVector{T1}, u::Abst
 
     thrust = u.^2 .* Ct
     F = [0., 0., sum(thrust)]
-    τ = [0.22*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), 0.13*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), Cq*(-thrust[1]-thrust[2]+thrust[3]+thrust[4])]
+    τ = [0.22*(-thrust[1]+thrust[2]+thrust[3]-thrust[4]), 0.13*(thrust[1]-thrust[2]+thrust[3]-thrust[4]), Cq*(thrust[1]+thrust[2]-thrust[3]-thrust[4])]
     # τ = u[1:3]
     # F = u[4:6]
     control = [τ;F]
@@ -67,8 +68,8 @@ const URDFPATH = joinpath(@__DIR__, "iris","iris.urdf")
 quad_mechanism = parse_urdf(URDFPATH, floating=true, remove_fixed_tree_joints=false)
 quad = quadrotor(quad_mechanism)
 
-tf = 10.0
-Δt = 4e-3
+tf = 5.0
+Δt = 0.015
 ts = range(0, tf, step=Δt)
 N = Int(round(tf/Δt)) + 1
 
@@ -76,9 +77,9 @@ n = num_positions(quad.mech) + num_velocities(quad.mech)
 m = 4
 Q = 1.0e-1*Diagonal(@SVector ones(n))
 Qf = 100.0*Diagonal(@SVector ones(n))
-R = 1.0/(1600^2)*Diagonal(@SVector ones(m))
+R = 1.0/(1100^2)*Diagonal(@SVector ones(m))
 x0 = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
-xf = [normalize([1.,0.,0.,0.]);[0.,0.,0.];zeros(n-7)]
+xf = [normalize([1.,0.,0.,0.]);[1.,1.,0.];zeros(n-7)]
 obj = LQRObjective(Q,R,Qf,xf,N)
 
 zero!(quad.statecache[Float64])
@@ -86,12 +87,13 @@ hover_force = dynamics_bias(quad.statecache[Float64])[6]
 u0 = fill(sqrt(hover_force/m/5.84e-06),m)
 U0 = [u0 for k = 1:N-1]
 conSet = ConstraintList(n,m,N)
-x_bnd = [fill(Inf, 7);0.1;0.1;fill(Inf, 8)]
-bnd = BoundConstraint(n, m, x_min=-x_bnd, x_max=x_bnd)
+bnd = BoundConstraint(n, m, u_min=fill(400.0, m), u_max=fill(1100.0, m))
 goal = GoalConstraint(xf)
-waypoint = GoalConstraint([[0.9330127, 0.25, 0.25, 0.0669873]; zeros(13)], 1:4)
+waypoint = GoalConstraint([[0.9330127, 0.25, 0.25, 0.0669873]; [0.,0.,1.5];zeros(6)], 5:7)
+waypoint2 = GoalConstraint([normalize([0, 0, 0.7068252, 0.7073883]); [1.,1.,1.];zeros(6)], 5:7)
 add_constraint!(conSet, bnd, 1:N-1)
-add_constraint!(conSet, waypoint, 200)
+add_constraint!(conSet, waypoint, N÷3)
+add_constraint!(conSet, waypoint2, Int(floor(N*3/4)))
 add_constraint!(conSet, goal, N)
 
 prob = Problem(quad, obj, xf, tf, x0=x0, constraints=conSet)
@@ -138,12 +140,15 @@ plot(ts, ori_traj)
 
 U = controls(altro)
 u_traj = [i for i in U]
-u_traj = hcat(u_traj...)
-plot(ts, u_traj)
+u_matrix = hcat(u_traj...)
+plot(ts[1:end-1], u_traj)
 
 open("controls.csv", "w") do io
-    for i=1:length(U)
-        writedlm(io, U[i]', ',')
+    for i=1:(2÷Δt)
+        writedlm(io, fill(500.00, m)', ',')
+    end
+    for i=1:length(u_traj)
+        writedlm(io, u_traj[i]', ',')
     end
 end
 
